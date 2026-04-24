@@ -50,7 +50,6 @@ kagu-tsuchi/
 │           └── memory/    # Conversation history
 ├── packages/
 │   ├── ui/           # Shared Shadcn components
-│   ├── eslint-config/
 │   └── typescript-config/
 ├── biome.json         # Biome config (replaces ESLint/Prettier)
 ├── pnpm-workspace.yaml
