@@ -187,8 +187,23 @@ export class SearchService {
                       searchResults,
                       memories,
                     })
-                    .then((synthesis) => {
+                    .then(async (synthesis) => {
                       emit("done", "agent3", JSON.stringify(synthesis));
+
+                      // Store in memory if results are sufficient
+                      if (searchResults.sufficient && searchResults.results) {
+                        const memoryId = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+                        await this.memoryService.store({
+                          id: memoryId,
+                          userId: queryDto.userId,
+                          query: queryDto.query,
+                          searchPlan: queryAnalysis.searchPlan,
+                          results: searchResults.results,
+                          report: synthesis.report,
+                          timestamp: new Date(),
+                        });
+                      }
+
                       subscriber.complete();
                     })
                     .catch((error) => {
