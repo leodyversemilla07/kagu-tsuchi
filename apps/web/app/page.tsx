@@ -145,7 +145,7 @@ export default function Home() {
       setAgent1((prev) => ({ ...prev, status: "completed", progress: 100 }));
       setAgent2((prev) => ({ ...prev, status: "active", progress: 35 }));
 
-      const response = await fetch(`${apiBaseUrl}/search`, {
+      const response = await fetch(`${apiBaseUrl}/search/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

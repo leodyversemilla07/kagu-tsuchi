@@ -9,6 +9,7 @@ import { Agent3Service } from "../agent3/agent3.service";
 import { SynthesisResult } from "../agent3/interfaces/synthesis.interface";
 import { SearchMemory } from "../memory/memory.interface";
 import { MemoryService } from "../memory/memory.service";
+import { Observable } from "rxjs";
 
 @Injectable()
 export class SearchService {
@@ -126,5 +127,90 @@ export class SearchService {
       this.logger.error(`Research failed: ${message}`, stack);
       throw error;
     }
+  }
+
+  conductResearchStream(
+    queryDto: QueryDto
+  ): Observable<string> {
+    return new Observable((subscriber) => {
+      this.logger.log(`Starting streaming research for: ${queryDto.query}`);
+
+      const emit = (type: string, source: string, data: string) => {
+        subscriber.next(this.createSseEvent(type, source, data));
+      };
+
+      emit("step", "memory", "Retrieving relevant memories...");
+
+      this.agent1Service
+        .analyzeQuery(queryDto)
+        .then((queryAnalysis) => {
+          emit("data", "agent1", JSON.stringify(queryAnalysis));
+
+          if (!queryAnalysis.clarified) {
+            emit(
+              "done",
+              "follow-up",
+              JSON.stringify(queryAnalysis.followUpQuestions)
+            );
+            subscriber.complete();
+            return;
+          }
+
+          const searchQueryDto: SearchQueryDto = {
+            queries: queryAnalysis.searchPlan.queries,
+            maxSearches: queryAnalysis.searchPlan.maxSearches,
+            priorityDomains: queryAnalysis.searchPlan.priorityDomains,
+            deepThink: queryDto.deepThink,
+          };
+
+          emit("step", "agent1", "Query analyzed");
+          emit("step", "agent2", "Searching...");
+
+
+          this.agent2Service
+            .executeSearch(searchQueryDto)
+            .then((searchResults) => {
+              emit("data", "agent2", JSON.stringify(searchResults));
+
+              emit(
+                "step",
+                "agent3",
+                `Found ${searchResults.results?.length || 0} results`
+              );
+
+
+              this.agent3Service
+                .synthesize({
+                  queryAnalysis,
+                  searchResults,
+                  memories: [],
+                })
+                .then((synthesis) => {
+                  emit("done", "agent3", JSON.stringify(synthesis));
+                  subscriber.complete();
+                })
+                .catch((error) => {
+                  emit("error", "agent3", error.message);
+                  subscriber.complete();
+                });
+            })
+            .catch((error) => {
+              emit("error", "agent2", error.message);
+              subscriber.complete();
+            });
+        })
+        .catch((error) => {
+          emit("error", "agent1", error.message);
+          subscriber.complete();
+        });
+    });
+  }
+
+  private createSseEvent(
+    type: string,
+    source: string,
+    data: string
+  ): string {
+    return `type: ${type}\nsource: ${source}\ndata: ${data}\n\n`;
   }
 }
