@@ -56,5 +56,19 @@ describe("Agent1Service", () => {
       expect(result.searchPlan.priorityDomains).toContain("stackoverflow.com");
       expect(result.searchPlan.priorityDomains).toContain("docs.org");
     });
+
+    it("should limit queries to maxSearches", async () => {
+      const dto: QueryDto = { query: "Learn React hooks", maxSearches: 1 };
+      const result = await service.analyzeQuery(dto);
+
+      expect(result.searchPlan.queries).toHaveLength(1);
+    });
+
+    it("should include original query in queries", async () => {
+      const dto: QueryDto = { query: "What is TypeScript" };
+      const result = await service.analyzeQuery(dto);
+
+      expect(result.searchPlan.queries).toContain("What is TypeScript");
+    });
   });
 });

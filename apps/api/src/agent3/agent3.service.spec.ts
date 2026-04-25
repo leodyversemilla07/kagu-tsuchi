@@ -154,5 +154,28 @@ describe("Agent3Service", () => {
 
       expect(result.report).toContain("No search results were returned");
     });
+
+    it("should handle missing queryAnalysis field", async () => {
+      const input = {
+        queryAnalysis: {
+          originalQuery: "test",
+          clarified: false,
+          followUpQuestions: [],
+          searchPlan: {
+            queries: [],
+            maxSearches: 5,
+            priorityDomains: [],
+          },
+          timestamp: new Date(),
+        },
+        searchResults: null,
+        memories: [],
+      };
+
+      const result = await service.synthesize(input);
+
+      expect(result.report).toBeDefined();
+      expect(result.citations).toEqual([]);
+    });
   });
 });
