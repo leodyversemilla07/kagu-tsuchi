@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { Agent2Service } from './agent2.service';
-import { Agent2Controller } from './agent2.controller';
-import { ConfigModule } from '@nestjs/config';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { Agent2Controller } from "./agent2.controller";
+import { Agent2Service } from "./agent2.service";
 
 @Module({
   imports: [ConfigModule],

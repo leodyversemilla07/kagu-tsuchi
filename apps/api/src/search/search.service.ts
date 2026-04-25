@@ -1,11 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Agent1Service } from '../agent1/agent1.service';
-import { Agent2Service } from '../agent2/agent2.service';
-import { MemoryService } from '../memory/memory.service';
-import { QueryDto } from '../agent1/dto/query.dto';
-import { SearchQueryDto } from '../agent2/dto/search.dto';
-import { SearchExecutionResult } from '../agent2/interfaces/search-result.interface';
-import { SearchMemory } from '../memory/memory.interface';
+import { Injectable, Logger } from "@nestjs/common";
+import { Agent1Service } from "../agent1/agent1.service";
+import { QueryDto } from "../agent1/dto/query.dto";
+import { QueryAnalysisResult } from "../agent1/interfaces/search-plan.interface";
+import { Agent2Service } from "../agent2/agent2.service";
+import { SearchQueryDto } from "../agent2/dto/search.dto";
+import { SearchExecutionResult } from "../agent2/interfaces/search-result.interface";
+import { Agent3Service } from "../agent3/agent3.service";
+import { SynthesisResult } from "../agent3/interfaces/synthesis.interface";
+import { SearchMemory } from "../memory/memory.interface";
+import { MemoryService } from "../memory/memory.service";
 
 @Injectable()
 export class SearchService {
@@ -14,44 +17,61 @@ export class SearchService {
   constructor(
     private readonly agent1Service: Agent1Service,
     private readonly agent2Service: Agent2Service,
-    private readonly memoryService: MemoryService,
+    private readonly agent3Service: Agent3Service,
+    private readonly memoryService: MemoryService
   ) {}
 
   async conductResearch(queryDto: QueryDto): Promise<{
-    queryAnalysis: any;
+    queryAnalysis: QueryAnalysisResult;
     searchResults: SearchExecutionResult | null;
+    synthesis: SynthesisResult;
+    report: string;
+    citations: string[];
     memories?: SearchMemory[];
   }> {
     this.logger.log(`Starting research for: ${queryDto.query}`);
 
     try {
       // Step 0: Retrieve relevant memories (Phase 9: Memory System)
-      this.logger.log('Step 0: Retrieving relevant memories...');
+      this.logger.log("Step 0: Retrieving relevant memories...");
       const relevantMemories = await this.memoryService.retrieve(
         queryDto.query,
         queryDto.userId,
         3
       );
-      const pastContext = relevantMemories.length > 0 
-        ? relevantMemories.map(m => `Past search: ${m.memories[0].query}`).join('; ')
-        : undefined;
+      const pastContext =
+        relevantMemories.length > 0
+          ? relevantMemories
+              .map((m) => `Past search: ${m.memories[0].query}`)
+              .join("; ")
+          : undefined;
 
       // Step 1: Agent1 - Query Analysis
-      this.logger.log('Step 1: Analyzing query with Agent1...');
+      this.logger.log("Step 1: Analyzing query with Agent1...");
       const queryAnalysis = await this.agent1Service.analyzeQuery(queryDto);
 
       // If query not clarified, return early with follow-up questions
       if (!queryAnalysis.clarified) {
-        this.logger.log('Query not clarified, returning follow-up questions');
+        this.logger.log("Query not clarified, returning follow-up questions");
+        const memories = relevantMemories.map((m) => m.memories[0]);
+        const synthesis = await this.agent3Service.synthesize({
+          queryAnalysis,
+          searchResults: null,
+          memories,
+        });
+
         return {
           queryAnalysis,
           searchResults: null,
-          memories: relevantMemories.map(m => m.memories[0]),
+          synthesis,
+          report: synthesis.report,
+          citations: synthesis.citations,
+          memories,
         };
       }
 
       // Step 2: Agent2 - Search Execution
-      this.logger.log('Step 2: Executing search with Agent2...');
+      this.logger.log("Step 2: Executing search with Agent2...");
       const searchQueryDto: SearchQueryDto = {
         queries: queryAnalysis.searchPlan.queries,
         maxSearches: queryAnalysis.searchPlan.maxSearches,
@@ -60,31 +80,50 @@ export class SearchService {
         pastContext,
       };
 
-      const searchResults = await this.agent2Service.executeSearch(searchQueryDto);
+      const searchResults =
+        await this.agent2Service.executeSearch(searchQueryDto);
 
-      // Step 3: Store in memory (Phase 9)
+      const memories = relevantMemories.map((m) => m.memories[0]);
+
+      // Step 3: Agent3 - Synthesis
+      this.logger.log("Step 3: Synthesizing report with Agent3...");
+      const synthesis = await this.agent3Service.synthesize({
+        queryAnalysis,
+        searchResults,
+        memories,
+      });
+
+      // Step 4: Store in memory (Phase 9)
       if (searchResults.sufficient && searchResults.results) {
-        this.logger.log('Step 3: Storing research in memory...');
-        const memoryId = `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        this.logger.log("Step 4: Storing research in memory...");
+        const memoryId = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         await this.memoryService.store({
           id: memoryId,
           userId: queryDto.userId,
           query: queryDto.query,
           searchPlan: queryAnalysis.searchPlan,
           results: searchResults.results,
+          report: synthesis.report,
           timestamp: new Date(),
         });
       }
 
-      this.logger.log(`Research complete. Found ${searchResults.results?.length || 0} results`);
+      this.logger.log(
+        `Research complete. Found ${searchResults.results?.length || 0} results`
+      );
 
       return {
         queryAnalysis,
         searchResults,
-        memories: relevantMemories.map(m => m.memories[0]),
+        synthesis,
+        report: synthesis.report,
+        citations: synthesis.citations,
+        memories,
       };
     } catch (error) {
-      this.logger.error(`Research failed: ${error.message}`, error.stack);
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Research failed: ${message}`, stack);
       throw error;
     }
   }

@@ -1,8 +1,15 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Logger } from '@nestjs/common';
-import { SearchService } from './search.service';
-import { QueryDto } from '../agent1/dto/query.dto';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  Post,
+} from "@nestjs/common";
+import { QueryDto } from "../agent1/dto/query.dto";
+import { SearchService } from "./search.service";
 
-@Controller('research')
+@Controller("search")
 export class SearchController {
   private readonly logger = new Logger(SearchController.name);
 

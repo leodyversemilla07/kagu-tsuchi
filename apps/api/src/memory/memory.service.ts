@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { SearchMemory, MemorySearchResult } from './memory.interface';
+import { Injectable, Logger } from "@nestjs/common";
+import { MemorySearchResult, SearchMemory } from "./memory.interface";
 
 @Injectable()
 export class MemoryService {
@@ -18,7 +18,8 @@ export class MemoryService {
       if (!this.userMemories.has(memory.userId)) {
         this.userMemories.set(memory.userId, new Set());
       }
-      this.userMemories.get(memory.userId)!.add(memory.id);
+      const userMemoryIds = this.userMemories.get(memory.userId);
+      userMemoryIds?.add(memory.id);
     }
 
     this.logger.log(`Stored memory ${memory.id} for query: ${memory.query}`);
@@ -28,15 +29,19 @@ export class MemoryService {
    * Retrieve relevant memories for a query (simple keyword match for now)
    * TODO: Upgrade to vector similarity search with Pinecone
    */
-  async retrieve(query: string, userId?: string, limit: number = 5): Promise<MemorySearchResult[]> {
+  async retrieve(
+    query: string,
+    userId?: string,
+    limit: number = 5
+  ): Promise<MemorySearchResult[]> {
     const results: MemorySearchResult[] = [];
     const queryLower = query.toLowerCase();
-    const keywords = queryLower.split(' ').filter(k => k.length > 3);
+    const keywords = queryLower.split(" ").filter((k) => k.length > 3);
 
     // Get candidate memories
     let candidateIds: string[] = [];
     if (userId && this.userMemories.has(userId)) {
-      candidateIds = Array.from(this.userMemories.get(userId)!);
+      candidateIds = Array.from(this.userMemories.get(userId) ?? []);
     } else {
       candidateIds = Array.from(this.memories.keys());
     }
@@ -47,7 +52,8 @@ export class MemoryService {
       if (!memory) continue;
 
       let score = 0;
-      const memoryText = `${memory.query} ${JSON.stringify(memory.searchPlan)}`.toLowerCase();
+      const memoryText =
+        `${memory.query} ${JSON.stringify(memory.searchPlan)}`.toLowerCase();
 
       for (const keyword of keywords) {
         if (memoryText.includes(keyword)) {
@@ -74,11 +80,14 @@ export class MemoryService {
       return [];
     }
 
-    const ids = this.userMemories.get(userId)!;
+    const ids = this.userMemories.get(userId) ?? new Set<string>();
     return Array.from(ids)
-      .map(id => this.memories.get(id))
+      .map((id) => this.memories.get(id))
       .filter((m): m is SearchMemory => m !== undefined)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
   }
 
   /**
@@ -87,6 +96,6 @@ export class MemoryService {
   async clear(): Promise<void> {
     this.memories.clear();
     this.userMemories.clear();
-    this.logger.log('Cleared all memories');
+    this.logger.log("Cleared all memories");
   }
 }

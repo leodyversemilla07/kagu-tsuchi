@@ -1,8 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Exa } from 'exa-js';
-import { SearchQueryDto } from './dto/search.dto';
-import { SearchExecutionResult, SearchResult } from './interfaces/search-result.interface';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Exa } from "exa-js";
+import { SearchQueryDto } from "./dto/search.dto";
+import {
+  SearchExecutionResult,
+  SearchResult,
+} from "./interfaces/search-result.interface";
 
 @Injectable()
 export class Agent2Service {
@@ -10,14 +13,24 @@ export class Agent2Service {
   private exa: Exa;
 
   constructor(private configService: ConfigService) {
-    this.exa = new Exa(this.configService.get<string>('EXA_API_KEY') || '8538d2a3-ee8d-4309-9576-b24ed78602bd');
+    const exaApiKey = this.configService.get<string>("EXA_API_KEY");
+
+    if (!exaApiKey) {
+      throw new Error("EXA_API_KEY is required to initialize Agent2Service");
+    }
+
+    this.exa = new Exa(exaApiKey);
   }
 
-  async executeSearch(searchDto: SearchQueryDto): Promise<SearchExecutionResult> {
+  async executeSearch(
+    searchDto: SearchQueryDto
+  ): Promise<SearchExecutionResult> {
     const { queries, maxSearches, priorityDomains, pastContext } = searchDto;
-    
-    this.logger.log(`Executing search for ${queries.length} queries, context: ${pastContext ? 'YES' : 'NO'}`);
-    
+
+    this.logger.log(
+      `Executing search for ${queries.length} queries, context: ${pastContext ? "YES" : "NO"}`
+    );
+
     let allResults: SearchResult[] = [];
     let searchesUsed = 0;
 
@@ -28,18 +41,14 @@ export class Agent2Service {
 
     // Execute searches
     for (const query of queries.slice(0, maxSearches)) {
-      try {
-        // Enhance query with past context if available
-        const enhancedQuery = pastContext 
-          ? `${query} (Previous context: ${pastContext.slice(0, 200)})`
-          : query;
-        
-        const results = await this.searchExa(enhancedQuery, priorityDomains);
-        allResults = [...allResults, ...results];
-        searchesUsed++;
-      } catch (error) {
-        this.logger.error(`Error searching for "${query}": ${error.message}`);
-      }
+      // Enhance query with past context if available
+      const enhancedQuery = pastContext
+        ? `${query} (Previous context: ${pastContext.slice(0, 200)})`
+        : query;
+
+      const results = await this.searchExa(enhancedQuery, priorityDomains);
+      allResults = [...allResults, ...results];
+      searchesUsed++;
     }
 
     // Simple evaluation (no OpenAI for now)
@@ -60,7 +69,10 @@ export class Agent2Service {
     };
   }
 
-  private async searchExa(query: string, priorityDomains?: string[]): Promise<SearchResult[]> {
+  private async searchExa(
+    query: string,
+    _priorityDomains?: string[]
+  ): Promise<SearchResult[]> {
     try {
       const response = await this.exa.search(query, {
         numResults: 10,
@@ -71,26 +83,28 @@ export class Agent2Service {
       });
 
       return response.results.map((r) => ({
-        title: r.title || '',
+        title: r.title || "",
         url: r.url,
-        snippet: r.text?.slice(0, 500) || '',
+        snippet: r.text?.slice(0, 500) || "",
         publishedDate: r.publishedDate,
         score: r.score,
       }));
     } catch (error) {
-      this.logger.error(`Exa API error: ${error.message}`);
-      return [];
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Exa API error: ${message}`);
+      throw error;
     }
   }
 
   private evaluateResults(results: SearchResult[]): boolean {
     if (results.length < 3) return false;
-    
-    const hasAuthSources = results.some(r => 
-      r.url.includes('github.com') ||
-      r.url.includes('stackoverflow.com') ||
-      r.url.includes('docs.') ||
-      r.url.includes('wikipedia.org')
+
+    const hasAuthSources = results.some(
+      (r) =>
+        r.url.includes("github.com") ||
+        r.url.includes("stackoverflow.com") ||
+        r.url.includes("docs.") ||
+        r.url.includes("wikipedia.org")
     );
 
     return hasAuthSources;
@@ -98,10 +112,12 @@ export class Agent2Service {
 
   private deduplicateResults(results: SearchResult[]): SearchResult[] {
     const seen = new Set<string>();
-    return results.filter(r => {
-      if (seen.has(r.url)) return false;
-      seen.add(r.url);
-      return true;
-    }).sort((a, b) => (b.score || 0) - (a.score || 0));
+    return results
+      .filter((r) => {
+        if (seen.has(r.url)) return false;
+        seen.add(r.url);
+        return true;
+      })
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
   }
 }
