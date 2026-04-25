@@ -90,7 +90,7 @@ cd apps/web
 pnpm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the app.
+Open [http://localhost:3000](http://localhost:3000) for frontend. API runs on port 3001.
 
 ## 🤖 Agent Architecture
 
@@ -117,7 +117,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 |----------|--------|-------------|
 | `/agent1/analyze` | POST | Query Analyzer (Agent1) |
 | `/agent2/search` | POST | Search Executor (Agent2) |
-| `/search` | POST | Full orchestration pipeline (SSE stream) |
+| `/search` | POST | Full orchestration pipeline |
 
 ### POST /search Request
 ```json
@@ -130,18 +130,15 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 }
 ```
 
-### POST /search Response (SSE Stream)
-```
-event: agent_status
-data: {"agent": "agent1", "status": "processing"}
-
-event: follow_up
-data: {"questions": ["Specific area?", "Timeline?"]}
-
-event: agent_status
-data: {"agent": "agent2", "status": "searching"}
-
-event: final_result
+### POST /search Response
+```json
+{
+  "queryAnalysis": { ... },
+  "searchResults": { ... },
+  "report": "...",
+  "citations": [...],
+  "memories": [...]
+}
 data: {"report": "...", "citations": [...]}
 ```
 
