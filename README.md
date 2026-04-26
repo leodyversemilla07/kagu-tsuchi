@@ -9,6 +9,8 @@ Kagu-tsuchi (Japanese fire god of creation) is a full-stack AI research assistan
 - **3-Agent Architecture**: Query Analyzer → Search Executor → Synthesizer
 - **Real-time Streaming**: Server-Sent Events (SSE) for live agent progress
 - **Memory System**: Remembers past searches for context-aware results
+- **Optional LLM Synthesis**: OpenAI or Anthropic for enhanced reports
+- **Input Validation**: class-validator + ValidationPipe
 - **Modern UI**: Shadcn v4 with Lyra preset (boxy, sharp edges, dark mode)
 - **Type-safe**: Full TypeScript integration across the stack
 - **Monorepo**: Turborepo + pnpm workspaces for scalable development
@@ -17,22 +19,20 @@ Kagu-tsuchi (Japanese fire god of creation) is a full-stack AI research assistan
 
 ### Frontend (`apps/web`)
 - **Next.js** 16.1.6 (App Router)
-- **React** 19.2.4
-- **Vercel AI SDK** for streaming responses
-- **Shadcn/ui** v4 (Lyra preset)
+- **React** 19.x
 - **Tailwind CSS** 4.x
+- **Shadcn/ui** v4 (Lyra preset)
 
 ### Backend (`apps/api`)
-- **NestJS** 11.0.1
-- **Node.js** 20.x
+- **NestJS** 11.x
 - **Exa API** for web search
-- **In-Memory Vector Store** (upgradeable to Pinecone)
+- **OpenAI/Anthropic** (optional for LLM synthesis)
 
 ### Tooling
-- **Biome** v2.4.13 (Linting + Formatting)
+- **Biome** (Linting + Formatting)
 - **Turborepo** 2.x (Build pipeline)
-- **pnpm** 8.x (Package manager)
-- **TypeScript** 5.7/5.9
+- **pnpm** 9.x (Package manager)
+- **TypeScript** 5.x
 
 ## 📂 Project Structure
 
@@ -46,12 +46,14 @@ kagu-tsuchi/
 │       └── src/
 │           ├── agent1/    # Query Analyzer
 │           ├── agent2/    # Search Executor
+│           ├── agent3/    # Synthesizer
 │           ├── search/    # Orchestration pipeline
 │           └── memory/    # Conversation history
 ├── packages/
 │   ├── ui/           # Shared Shadcn components
 │   └── typescript-config/
-├── biome.json         # Biome config (replaces ESLint/Prettier)
+├── .github/workflows/  # CI/CD
+├── biome.json         # Biome config
 ├── pnpm-workspace.yaml
 └── turbo.json
 ```
@@ -59,9 +61,10 @@ kagu-tsuchi/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 20.x
-- pnpm 8.x
+- Node.js 22.x
+- pnpm 9.x
 - Exa API key (for web search)
+- OpenAI or Anthropic key (optional, for LLM synthesis)
 
 ### Installation
 
@@ -97,17 +100,17 @@ Open [http://localhost:3000](http://localhost:3000) for frontend. API runs on po
 ### Agent 1: Query Analyzer
 - **Input**: Raw user query
 - **Output**: Structured search plan + follow-up questions
-- **Tech**: LLM function calling (OpenAI/Claude)
+- **Logic**: Determines if query needs clarification
 
 ### Agent 2: Search Executor
 - **Input**: Search plan from Agent1
-- **Output**: Curated search results + deep think decision
-- **Tech**: Exa API + LLM evaluation + Memory context
+- **Output**: Curated search results
+- **Tech**: Exa API + authenticity evaluation
 
 ### Agent 3: Synthesizer
-- **Input**: Curated results from Agent2
-- **Output**: Markdown report with citations + optional charts
-- **Tech**: Vercel AI SDK streaming
+- **Input**: Curated results from Agent2 + memory context
+- **Output**: Markdown report with citations
+- **Optional**: OpenAI/Anthropic for enhanced synthesis
 
 ## 📡 API Endpoints
 
@@ -115,18 +118,15 @@ Open [http://localhost:3000](http://localhost:3000) for frontend. API runs on po
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/agent1/analyze` | POST | Query Analyzer (Agent1) |
-| `/agent2/search` | POST | Search Executor (Agent2) |
-| `/search` | POST | Full orchestration pipeline |
+| `/search` | POST | Full orchestration (sync) |
+| `/search/stream` | POST | Full orchestration (SSE streaming) |
 
 ### POST /search Request
 ```json
 {
   "query": "What are the latest AI agent frameworks?",
-  "options": {
-    "deepThink": true,
-    "maxResults": 10
-  }
+  "maxSearches": 5,
+  "deepThink": false
 }
 ```
 
@@ -139,8 +139,43 @@ Open [http://localhost:3000](http://localhost:3000) for frontend. API runs on po
   "citations": [...],
   "memories": [...]
 }
+```
+
+### POST /search/stream Response (SSE)
+```
+type: step
+source: memory
+data: Retrieving relevant memories...
+
+type: data
+source: agent1
+data: {"queryAnalysis": {...}}
+
+type: data  
+source: agent2
+data: {"searchResults": {...}}
+
+type: done
+source: agent3
 data: {"report": "...", "citations": [...]}
 ```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pnpm test
+
+# Run unit tests
+cd apps/api && pnpm test
+
+# Run E2E tests
+cd apps/api && pnpm test:e2e
+```
+
+**Test Coverage:**
+- 22 unit tests (Agent1, Agent2, Agent3, SearchService)
+- 3 E2E tests (validation, streaming)
 
 ## 🎨 UI Features
 
@@ -152,7 +187,7 @@ data: {"report": "...", "citations": [...]}
 
 ## 🧹 Linting & Formatting
 
-This project uses **Biome** (replacing ESLint + Prettier):
+This project uses **Biome**:
 
 ```bash
 # Check code
@@ -160,20 +195,6 @@ pnpm run lint
 
 # Format code
 pnpm run format
-
-# Fix issues
-pnpm dlx biome check --apply
-```
-
-## 📦 Adding Components
-
-To add Shadcn components:
-
-```bash
-# From root directory
-pnpm dlx shadcn@latest add [component] --cwd apps/web
-
-# Components are stored in packages/ui/src/components/
 ```
 
 ## 🚢 Deployment
@@ -199,14 +220,16 @@ pnpm dlx shadcn@latest add [component] --cwd apps/web
 - [x] Phase 7: Agent orchestration pipeline
 - [x] Phase 8: Next.js UI with agent visualizer
 - [x] Phase 9: Memory system (in-memory store)
-- [ ] Phase 10: Deploy to Vercel + Railway + Case study
+- [x] SSE streaming support
+- [x] Input validation
+- [x] CI/CD pipeline
+- [x] Unit & E2E tests
 
 ## 📚 Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [NestJS Documentation](https://docs.nestjs.com/)
 - [Shadcn/ui Documentation](https://ui.shadcn.com/)
-- [Vercel AI SDK](https://sdk.vercel.ai/)
 - [Biome Documentation](https://biomejs.dev/)
 
 ## 👤 Author
@@ -214,7 +237,6 @@ pnpm dlx shadcn@latest add [component] --cwd apps/web
 **Leodyver S. Semilla**
 - GitHub: [@leodyversemilla07](https://github.com/leodyversemilla07)
 - Email: leodyversemilla07@gmail.com
-- Website: [leodyver.me](https://leodyver.me)
 
 ## 📄 License
 
