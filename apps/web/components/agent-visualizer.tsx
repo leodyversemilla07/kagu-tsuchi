@@ -40,7 +40,9 @@ export function AgentVisualizer({
   return (
     <Card className="w-full max-w-2xl mx-auto mb-6 md:mb-8">
       <CardHeader>
-        <CardTitle className="text-base md:text-lg">Agent Pipeline Status</CardTitle>
+        <CardTitle className="text-base md:text-lg">
+          Agent Pipeline Status
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-3 md:space-y-4">

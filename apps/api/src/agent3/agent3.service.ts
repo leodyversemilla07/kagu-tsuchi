@@ -49,7 +49,12 @@ export class Agent3Service {
     const openaiKey = this.configService.get<string>("OPENAI_API_KEY");
     const anthropicKey = this.configService.get<string>("ANTHROPIC_API_KEY");
     const openrouterKey = this.configService.get<string>("OPENROUTER_API_KEY");
-    const supportedProviders = new Set(["auto", "openai", "anthropic", "openrouter"]);
+    const supportedProviders = new Set([
+      "auto",
+      "openai",
+      "anthropic",
+      "openrouter",
+    ]);
 
     if (!supportedProviders.has(provider)) {
       throw new Error(

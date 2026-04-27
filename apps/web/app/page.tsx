@@ -11,9 +11,9 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { useState } from "react";
-import { AgentVisualizer } from "@/components/agent-visualizer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AgentVisualizer } from "@/components/agent-visualizer";
 
 type AgentStatus = "idle" | "active" | "completed" | "error";
 
@@ -89,7 +89,7 @@ const initialAgents = {
   } satisfies AgentState,
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 async function streamReport(
   report: string,
@@ -216,7 +216,9 @@ ${message}
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
         <div className="text-center space-y-3 md:space-y-4">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">🔥 Kagu-tsuchi</h1>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+            🔥 Kagu-tsuchi
+          </h1>
           <p className="text-lg md:text-xl text-muted-foreground">
             Multi-Agent AI Research Assistant
           </p>
@@ -261,19 +263,25 @@ ${message}
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
                 Research Report
-                {streamingText && !finalReport && <Badge variant="secondary" className="animate-pulse">Streaming...</Badge>}
+                {streamingText && !finalReport && (
+                  <Badge variant="secondary" className="animate-pulse">
+                    Streaming...
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[400px] md:h-[500px] w-full rounded-md border p-3 md:p-4">
-                <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none
+                <div
+                  className="prose prose-sm md:prose-base dark:prose-invert max-w-none
                   prose-headings:mt-4 prose-headings:mb-2
                   prose-p:mb-2 prose-p:leading-relaxed
                   prose-li:my-1
                   prose-a:text-blue-600 prose-a:underline
                   prose-code:before:content-none prose-code:after:content-none
                   prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-                ">
+                "
+                >
                   {streamingText ? (
                     <>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
