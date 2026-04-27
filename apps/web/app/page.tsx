@@ -12,6 +12,8 @@ import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { useState } from "react";
 import { AgentVisualizer } from "@/components/agent-visualizer";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type AgentStatus = "idle" | "active" | "completed" | "error";
 
@@ -87,7 +89,7 @@ const initialAgents = {
   } satisfies AgentState,
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 async function streamReport(
   report: string,
@@ -141,10 +143,6 @@ export default function Home() {
       setCurrentAgent(1);
       setAgent1((prev) => ({ ...prev, status: "active", progress: 30 }));
 
-      setCurrentAgent(2);
-      setAgent1((prev) => ({ ...prev, status: "completed", progress: 100 }));
-      setAgent2((prev) => ({ ...prev, status: "active", progress: 35 }));
-
       const response = await fetch(`${apiBaseUrl}/search/stream`, {
         method: "POST",
         headers: {
@@ -166,15 +164,21 @@ export default function Home() {
 
       const researchResponse = (await response.json()) as ResearchResponse;
 
+      // Agent1 completed
+      setAgent1((prev) => ({ ...prev, status: "completed", progress: 100 }));
+      setCurrentAgent(2);
+
+      // Agent2 status
       setAgent2((prev) => ({
         ...prev,
         status: researchResponse.searchResults ? "completed" : "idle",
         progress: researchResponse.searchResults ? 100 : 0,
       }));
       setCurrentAgent(3);
-      setAgent3((prev) => ({ ...prev, status: "active", progress: 0 }));
 
       const report = researchResponse.report;
+      setAgent3((prev) => ({ ...prev, status: "active", progress: 0 }));
+
       await streamReport(report, setStreamingText, setAgent3);
 
       setAgent3((prev) => ({ ...prev, status: "completed", progress: 100 }));
@@ -209,30 +213,31 @@ ${message}
   const reportText = streamingText || finalReport;
 
   return (
-    <main className="min-h-screen bg-background p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">🔥 Kagu-tsuchi</h1>
-          <p className="text-xl text-muted-foreground">
+    <main className="min-h-screen bg-background p-4 md:p-8">
+      <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
+        <div className="text-center space-y-3 md:space-y-4">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">🔥 Kagu-tsuchi</h1>
+          <p className="text-lg md:text-xl text-muted-foreground">
             Multi-Agent AI Research Assistant
           </p>
         </div>
 
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-4">
+          <CardContent className="pt-4 md:pt-6">
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
               <Input
                 placeholder="Ask a research question..."
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                 disabled={isSearching}
-                className="text-lg"
+                className="text-base md:text-lg flex-1"
               />
               <Button
                 onClick={handleSearch}
                 disabled={isSearching || !query.trim()}
                 size="lg"
+                className="w-full sm:w-auto"
               >
                 {isSearching ? "Researching..." : "Search"}
               </Button>
@@ -252,81 +257,34 @@ ${message}
         )}
 
         {reportText && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
                 Research Report
-                {streamingText && !finalReport && <Badge>Streaming...</Badge>}
+                {streamingText && !finalReport && <Badge variant="secondary" className="animate-pulse">Streaming...</Badge>}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px] w-full rounded-md border p-4">
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  {reportText
-                    .split("\n")
-                    .map((line, index) => ({
-                      id: `${line}-${index}`,
-                      line,
-                    }))
-                    .map(({ id, line }) => {
-                      if (line.startsWith("# ")) {
-                        return (
-                          <h1 key={id} className="text-2xl font-bold mt-6 mb-4">
-                            {line.substring(2)}
-                          </h1>
-                        );
-                      }
-
-                      if (line.startsWith("## ")) {
-                        return (
-                          <h2
-                            key={id}
-                            className="text-xl font-semibold mt-4 mb-2"
-                          >
-                            {line.substring(3)}
-                          </h2>
-                        );
-                      }
-
-                      if (line.startsWith("### ")) {
-                        return (
-                          <h3
-                            key={id}
-                            className="text-lg font-medium mt-3 mb-2"
-                          >
-                            {line.substring(4)}
-                          </h3>
-                        );
-                      }
-
-                      if (line.startsWith("- ") || /^\d+\. /.test(line)) {
-                        return (
-                          <p key={id} className="mb-1 pl-4 text-sm">
-                            {line}
-                          </p>
-                        );
-                      }
-
-                      if (line.startsWith("[")) {
-                        return (
-                          <p key={id} className="text-sm text-muted-foreground">
-                            📎 {line}
-                          </p>
-                        );
-                      }
-
-                      if (line.trim() === "") {
-                        return <br key={id} />;
-                      }
-
-                      return (
-                        <p key={id} className="mb-2">
-                          {line}
-                        </p>
-                      );
-                    })}
-                  {streamingText && !finalReport && (
-                    <span className="animate-pulse">|</span>
+              <ScrollArea className="h-[400px] md:h-[500px] w-full rounded-md border p-3 md:p-4">
+                <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none
+                  prose-headings:mt-4 prose-headings:mb-2
+                  prose-p:mb-2 prose-p:leading-relaxed
+                  prose-li:my-1
+                  prose-a:text-blue-600 prose-a:underline
+                  prose-code:before:content-none prose-code:after:content-none
+                  prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+                ">
+                  {streamingText ? (
+                    <>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {streamingText}
+                      </ReactMarkdown>
+                      <span className="animate-pulse">|</span>
+                    </>
+                  ) : (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {finalReport}
+                    </ReactMarkdown>
                   )}
                 </div>
               </ScrollArea>

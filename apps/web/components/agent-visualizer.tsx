@@ -38,16 +38,16 @@ export function AgentVisualizer({
   ];
 
   return (
-    <Card className="w-full max-w-2xl mx-auto mb-8">
+    <Card className="w-full max-w-2xl mx-auto mb-6 md:mb-8">
       <CardHeader>
-        <CardTitle className="text-lg">Agent Pipeline Status</CardTitle>
+        <CardTitle className="text-base md:text-lg">Agent Pipeline Status</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           {agents.map((agent) => (
             <div key={agent.id} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2 md:gap-3">
                   <div
                     className={`w-3 h-3 rounded-full ${
                       agent.status === "active"

@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { generateText } from "ai";
@@ -48,11 +48,12 @@ export class Agent3Service {
       .toLowerCase();
     const openaiKey = this.configService.get<string>("OPENAI_API_KEY");
     const anthropicKey = this.configService.get<string>("ANTHROPIC_API_KEY");
-    const supportedProviders = new Set(["auto", "openai", "anthropic"]);
+    const openrouterKey = this.configService.get<string>("OPENROUTER_API_KEY");
+    const supportedProviders = new Set(["auto", "openai", "anthropic", "openrouter"]);
 
     if (!supportedProviders.has(provider)) {
       throw new Error(
-        `Unsupported SYNTHESIS_PROVIDER "${provider}". Expected one of: auto, openai, anthropic`
+        `Unsupported SYNTHESIS_PROVIDER "${provider}". Expected one of: auto, openai, anthropic, openrouter`
       );
     }
 
@@ -68,13 +69,20 @@ export class Agent3Service {
       );
     }
 
+    if (provider === "openrouter" && !openrouterKey) {
+      throw new Error(
+        "OPENROUTER_API_KEY is required when SYNTHESIS_PROVIDER=openrouter"
+      );
+    }
+
     if ((provider === "openai" || provider === "auto") && openaiKey) {
       const modelName = this.configService.get<string>(
         "OPENAI_SYNTHESIS_MODEL",
         "gpt-4o-mini"
       );
+      const openaiProvider = createOpenAI({ apiKey: openaiKey });
       const { text } = await generateText({
-        model: openai(modelName),
+        model: openaiProvider(modelName),
         prompt: this.buildLlmPrompt(input),
       });
 
@@ -88,6 +96,23 @@ export class Agent3Service {
       );
       const { text } = await generateText({
         model: anthropic(modelName),
+        prompt: this.buildLlmPrompt(input),
+      });
+
+      return text;
+    }
+
+    if ((provider === "openrouter" || provider === "auto") && openrouterKey) {
+      const modelName = this.configService.get<string>(
+        "OPENROUTER_SYNTHESIS_MODEL",
+        "tencent/hy3-preview:free"
+      );
+      const openrouterProvider = createOpenAI({
+        apiKey: openrouterKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+      const { text } = await generateText({
+        model: openrouterProvider(modelName),
         prompt: this.buildLlmPrompt(input),
       });
 
