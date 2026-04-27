@@ -45,3 +45,10 @@ Thumbs.db
 # Misc
 *.tgz
 *.tar.gz
+
+# Unrelated projects in workspace
+packages/procurement-agents/
+packages/redflag-agents/
+
+# Scratch files
+apps/api/test-synthesis.ts
