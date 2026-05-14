@@ -10,10 +10,14 @@ import {
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
+import { ClockCounterClockwise } from "@phosphor-icons/react";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentVisualizer } from "@/components/agent-visualizer";
+import { ExportButton } from "@/components/export-button";
+import { SearchHistorySidebar } from "@/components/search-history-sidebar";
+import { useSearchHistory } from "@/hooks/use-search-history";
 
 type AgentStatus = "idle" | "active" | "completed" | "error";
 
@@ -121,6 +125,9 @@ export default function Home() {
   const [agent3, setAgent3] = useState<AgentState>(initialAgents.agent3);
   const [streamingText, setStreamingText] = useState("");
   const [finalReport, setFinalReport] = useState("");
+  const [citations, setCitations] = useState<string[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { addToHistory } = useSearchHistory();
 
   const resetAgents = () => {
     setAgent1(initialAgents.agent1);
@@ -137,6 +144,7 @@ export default function Home() {
     setIsSearching(true);
     setStreamingText("");
     setFinalReport("");
+    setCitations([]);
     resetAgents();
 
     try {
@@ -181,9 +189,12 @@ export default function Home() {
 
       await streamReport(report, setStreamingText, setAgent3);
 
+      const reportCitations = researchResponse.citations ?? [];
       setAgent3((prev) => ({ ...prev, status: "completed", progress: 100 }));
       setFinalReport(report);
+      setCitations(reportCitations);
       setStreamingText("");
+      addToHistory(trimmedQuery, report, reportCitations);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const errorReport = `# Research Error
@@ -215,7 +226,16 @@ ${message}
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
-        <div className="text-center space-y-3 md:space-y-4">
+        <div className="text-center space-y-3 md:space-y-4 relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSidebarOpen(true)}
+            className="absolute right-0 top-0"
+            aria-label="Open search history"
+          >
+            <ClockCounterClockwise className="w-5 h-5" />
+          </Button>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
             🔥 Kagu-tsuchi
           </h1>
@@ -261,14 +281,23 @@ ${message}
         {reportText && (
           <Card className="overflow-hidden">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
-                Research Report
-                {streamingText && !finalReport && (
-                  <Badge variant="secondary" className="animate-pulse">
-                    Streaming...
-                  </Badge>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                  Research Report
+                  {streamingText && !finalReport && (
+                    <Badge variant="secondary" className="animate-pulse">
+                      Streaming...
+                    </Badge>
+                  )}
+                </CardTitle>
+                {finalReport && (
+                  <ExportButton
+                    report={finalReport}
+                    citations={citations}
+                    query={query}
+                  />
                 )}
-              </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[400px] md:h-[500px] w-full rounded-md border p-3 md:p-4">
@@ -300,6 +329,16 @@ ${message}
           </Card>
         )}
       </div>
+
+      <SearchHistorySidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSelectQuery={(q) => {
+          setQuery(q);
+          setSidebarOpen(false);
+        }}
+        currentQuery={query}
+      />
     </main>
   );
 }
