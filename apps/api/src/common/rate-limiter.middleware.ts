@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   type NestMiddleware,
+  type OnModuleDestroy,
 } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 
@@ -21,18 +22,25 @@ interface RateLimitEntry {
  *   RATE_LIMIT_WINDOW — window size in seconds (default 60)
  */
 @Injectable()
-export class RateLimiterMiddleware implements NestMiddleware {
+export class RateLimiterMiddleware implements NestMiddleware, OnModuleDestroy {
   private readonly logger = new Logger(RateLimiterMiddleware.name);
   private readonly hits = new Map<string, RateLimitEntry>();
   private readonly maxRequests: number;
   private readonly windowMs: number;
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor() {
     this.maxRequests = Number(process.env.RATE_LIMIT_MAX) || 30;
     this.windowMs = (Number(process.env.RATE_LIMIT_WINDOW) || 60) * 1000;
 
     // Periodic cleanup every 2 minutes to prevent memory leaks
-    setInterval(() => this.cleanup(), 120_000).unref();
+    this.cleanupTimer = setInterval(() => this.cleanup(), 120_000);
+    this.cleanupTimer.unref();
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.cleanupTimer);
+    this.hits.clear();
   }
 
   use(req: Request, res: Response, next: NextFunction): void {

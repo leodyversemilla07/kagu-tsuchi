@@ -19,6 +19,7 @@ import {
 } from "@workspace/ui/components/card";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { formatDistanceToNow } from "date-fns";
+import { useEffect } from "react";
 import {
   type SearchHistoryItem,
   useSearchHistory,
@@ -38,6 +39,16 @@ export function SearchHistorySidebar({
   currentQuery,
 }: SearchHistorySidebarProps) {
   const { history, removeFromHistory, clearHistory } = useSearchHistory();
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   const copyToClipboard = async (text: string) => {
     try {

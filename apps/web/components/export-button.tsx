@@ -10,6 +10,15 @@ interface ExportButtonProps {
   query: string;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export function ExportButton({ report, citations, query }: ExportButtonProps) {
   const exportAsMarkdown = () => {
     const content = `# ${query}\n\n${report}\n\n## Citations\n${citations.map((citation, i) => `${i + 1}. ${citation}`).join("\n")}`;
@@ -56,9 +65,9 @@ export function ExportButton({ report, citations, query }: ExportButtonProps) {
           </style>
         </head>
         <body>
-          <h1>${query}</h1>
-          <div>${report.replace(/\n/g, "<br>")}</div>
-          ${citations.length > 0 ? `<h2>Citations</h2><ol>${citations.map((citation) => `<li>${citation}</li>`).join("")}</ol>` : ""}
+          <h1>${escapeHtml(query)}</h1>
+          <div>${report.replace(/\n/g, "<br>").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+          ${citations.length > 0 ? `<h2>Citations</h2><ol>${citations.map((citation) => `<li>${escapeHtml(citation)}</li>`).join("")}</ol>` : ""}
         </body>
         </html>
       `;

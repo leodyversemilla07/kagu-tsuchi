@@ -7,8 +7,11 @@ export class MemoryService {
   private memories: Map<string, SearchMemory> = new Map();
   private userMemories: Map<string, Set<string>> = new Map();
 
+  /** Maximum number of memories to retain (oldest evicted first) */
+  private readonly maxMemories = Number(process.env.MEMORY_MAX_ENTRIES) || 500;
+
   /**
-   * Store a search memory
+   * Store a search memory. Evicts oldest entries when the cap is reached.
    */
   async store(memory: SearchMemory): Promise<void> {
     this.memories.set(memory.id, memory);
@@ -22,6 +25,11 @@ export class MemoryService {
       userMemoryIds?.add(memory.id);
     }
 
+    // Evict oldest memories if over cap
+    if (this.memories.size > this.maxMemories) {
+      this.evictOldest(this.memories.size - this.maxMemories);
+    }
+
     this.logger.log(`Stored memory ${memory.id} for query: ${memory.query}`);
   }
 
@@ -31,7 +39,7 @@ export class MemoryService {
    * Uses a lightweight TF-IDF-inspired scoring approach:
    *  - Exact phrase match gets highest weight
    *  - Individual keyword matches are weighted by inverse document frequency
-n   *  - Recency is factored in as a small bonus
+   *  - Recency is factored in as a small bonus
    */
   async retrieve(
     query: string,
@@ -140,5 +148,26 @@ n   *  - Recency is factored in as a small bonus
     this.memories.clear();
     this.userMemories.clear();
     this.logger.log("Cleared all memories");
+  }
+
+  /**
+   * Evict the oldest N memories by timestamp.
+   */
+  private evictOldest(count: number): void {
+    const sorted = Array.from(this.memories.entries())
+      .sort(
+        ([, a], [, b]) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      )
+      .slice(0, count);
+
+    for (const [id, memory] of sorted) {
+      this.memories.delete(id);
+      if (memory.userId) {
+        this.userMemories.get(memory.userId)?.delete(id);
+      }
+    }
+
+    this.logger.debug(`Evicted ${sorted.length} oldest memories`);
   }
 }

@@ -35,7 +35,7 @@ export default function RootLayout({
       className={cn(
         "antialiased",
         fontSans.variable,
-        "font-mono",
+        "font-sans",
         jetbrainsMono.variable
       )}
     >
