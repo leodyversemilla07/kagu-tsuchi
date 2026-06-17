@@ -7,7 +7,7 @@ import {
   Logger,
   Post,
 } from "@nestjs/common";
-import { Observable } from "rxjs";
+import type { Observable } from "rxjs";
 import { QueryDto } from "../agent1/dto/query.dto";
 import { SearchService } from "./search.service";
 
@@ -27,6 +27,9 @@ export class SearchController {
   @Post("stream")
   @HttpCode(HttpStatus.OK)
   @Header("Content-Type", "text/event-stream")
+  @Header("Cache-Control", "no-cache")
+  @Header("Connection", "keep-alive")
+  @Header("X-Accel-Buffering", "no")
   conductResearchStream(@Body() queryDto: QueryDto): Observable<string> {
     this.logger.log(
       `Received streaming research request for: ${queryDto.query}`

@@ -1,5 +1,6 @@
 "use client";
 
+import { ClockCounterClockwise } from "@phosphor-icons/react";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -10,8 +11,7 @@ import {
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
-import { ClockCounterClockwise } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentVisualizer } from "@/components/agent-visualizer";
@@ -28,48 +28,10 @@ interface AgentState {
   progress: number;
 }
 
-interface SearchResult {
-  title: string;
-  url: string;
-  snippet: string;
-  publishedDate?: string;
-  score?: number;
-}
-
-interface ResearchResponse {
-  queryAnalysis: {
-    originalQuery: string;
-    clarified: boolean;
-    followUpQuestions?: string[];
-    searchPlan: {
-      queries: string[];
-      maxSearches: number;
-      priorityDomains: string[];
-    };
-    timestamp: string;
-  };
-  searchResults: {
-    sufficient: boolean;
-    deepThinkUsed: boolean;
-    results: SearchResult[];
-    metadata: {
-      totalSearches: number;
-      queriesUsed: string[];
-      deepThinkTriggered: boolean;
-    };
-  } | null;
-  synthesis: {
-    report: string;
-    citations: string[];
-    generatedAt: string;
-  };
-  report: string;
-  citations: string[];
-  memories?: Array<{
-    id: string;
-    query: string;
-    timestamp: string;
-  }>;
+interface SseEvent {
+  type: "step" | "data" | "done" | "error";
+  source: string;
+  data: string;
 }
 
 const initialAgents = {
@@ -95,25 +57,31 @@ const initialAgents = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-async function streamReport(
-  report: string,
-  setStreamingText: (value: string) => void,
-  setAgent3: React.Dispatch<React.SetStateAction<AgentState>>
-) {
-  const chunkSize = 12;
+/**
+ * Parse an SSE text block into structured events.
+ * SSE format: `type: ...\nsource: ...\ndata: ...\n\n`
+ */
+function parseSseEvents(raw: string): SseEvent[] {
+  const events: SseEvent[] = [];
+  const blocks = raw.split("\n\n");
 
-  for (let index = 0; index < report.length; index += chunkSize) {
-    await new Promise((resolve) => setTimeout(resolve, 8));
-    const nextText = report.substring(0, index + chunkSize);
-    setStreamingText(nextText);
-    setAgent3((prev) => ({
-      ...prev,
-      progress: Math.min(
-        99,
-        Math.floor((nextText.length / report.length) * 100)
-      ),
-    }));
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const event: Partial<SseEvent> = {};
+
+    for (const line of lines) {
+      if (line.startsWith("type: "))
+        event.type = line.slice(6) as SseEvent["type"];
+      else if (line.startsWith("source: ")) event.source = line.slice(8);
+      else if (line.startsWith("data: ")) event.data = line.slice(6);
+    }
+
+    if (event.type && event.source && event.data !== undefined) {
+      events.push(event as SseEvent);
+    }
   }
+
+  return events;
 }
 
 export default function Home() {
@@ -129,16 +97,163 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { addToHistory } = useSearchHistory();
 
-  const resetAgents = () => {
+  const resetAgents = useCallback(() => {
     setAgent1(initialAgents.agent1);
     setAgent2(initialAgents.agent2);
     setAgent3(initialAgents.agent3);
     setCurrentAgent(0);
-  };
+  }, []);
 
-  const handleSearch = async () => {
+  /**
+   * Simulate streaming of the final report text for a typewriter effect.
+   * Declared first because handleSseEvent depends on it.
+   */
+  const streamReportText = useCallback((report: string) => {
+    setAgent3((prev) => ({ ...prev, status: "active", progress: 10 }));
+    setStreamingText("");
+
+    let index = 0;
+    const chunkSize = 12;
+    const intervalMs = 8;
+
+    const timer = setInterval(() => {
+      index += chunkSize;
+      const nextText = report.substring(0, index);
+      setStreamingText(nextText);
+      setAgent3((prev) => ({
+        ...prev,
+        progress: Math.min(99, Math.floor((index / report.length) * 100)),
+      }));
+
+      if (index >= report.length) {
+        clearInterval(timer);
+        setAgent3((prev) => ({ ...prev, status: "completed", progress: 100 }));
+        setFinalReport(report);
+        setStreamingText("");
+      }
+    }, intervalMs);
+  }, []);
+
+  /**
+   * Handle a single SSE event from the backend stream.
+   * Declared after streamReportText (dependency) but before handleSearch.
+   */
+  const handleSseEvent = useCallback(
+    (event: SseEvent) => {
+      switch (event.type) {
+        case "step": {
+          if (event.source === "agent1") {
+            setCurrentAgent(1);
+            setAgent1((prev) => ({
+              ...prev,
+              status: "active",
+              progress: 30,
+            }));
+          } else if (event.source === "agent2") {
+            setCurrentAgent(2);
+            setAgent1((prev) => ({
+              ...prev,
+              status: "completed",
+              progress: 100,
+            }));
+            setAgent2((prev) => ({
+              ...prev,
+              status: "active",
+              progress: 50,
+            }));
+          } else if (event.source === "agent3") {
+            setCurrentAgent(3);
+            setAgent1((prev) => ({
+              ...prev,
+              status: "completed",
+              progress: 100,
+            }));
+            setAgent2((prev) => ({
+              ...prev,
+              status: "completed",
+              progress: 100,
+            }));
+            setAgent3((prev) => ({
+              ...prev,
+              status: "active",
+              progress: 10,
+            }));
+          }
+          break;
+        }
+
+        case "data": {
+          try {
+            JSON.parse(event.data);
+
+            if (event.source === "agent1") {
+              setAgent1((prev) => ({
+                ...prev,
+                status: "completed",
+                progress: 100,
+              }));
+            } else if (event.source === "agent2") {
+              setAgent2((prev) => ({
+                ...prev,
+                status: "completed",
+                progress: 100,
+              }));
+            }
+          } catch {
+            // Non-JSON data — ignore
+          }
+          break;
+        }
+
+        case "done": {
+          try {
+            const payload = JSON.parse(event.data);
+
+            if (event.source === "agent3" && payload.report) {
+              streamReportText(payload.report);
+              const reportCitations = payload.citations ?? [];
+              setCitations(reportCitations);
+            } else if (event.source === "follow-up") {
+              const questions = Array.isArray(payload) ? payload : [];
+              const followUpReport = `# Follow-up Needed\n\n${questions.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n")}`;
+              setFinalReport(followUpReport);
+              setAgent3((prev) => ({
+                ...prev,
+                status: "completed",
+                progress: 100,
+              }));
+            }
+          } catch {
+            // Non-JSON done — ignore
+          }
+          break;
+        }
+
+        case "error": {
+          const errorMessage = event.data || "Unknown error";
+          setFinalReport(`# Error from ${event.source}\n\n${errorMessage}`);
+          setAgent1((prev) =>
+            prev.status === "active" ? { ...prev, status: "error" } : prev
+          );
+          setAgent2((prev) =>
+            prev.status === "active" ? { ...prev, status: "error" } : prev
+          );
+          setAgent3((prev) =>
+            prev.status === "active" ? { ...prev, status: "error" } : prev
+          );
+          break;
+        }
+      }
+    },
+    [streamReportText]
+  );
+
+  /**
+   * Main search handler. Reads the SSE stream from the backend.
+   * Declared last because it depends on handleSseEvent.
+   */
+  const handleSearch = useCallback(async () => {
     const trimmedQuery = query.trim();
-
     if (!trimmedQuery || isSearching) return;
 
     setIsSearching(true);
@@ -148,14 +263,9 @@ export default function Home() {
     resetAgents();
 
     try {
-      setCurrentAgent(1);
-      setAgent1((prev) => ({ ...prev, status: "active", progress: 30 }));
-
       const response = await fetch(`${apiBaseUrl}/search/stream`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: trimmedQuery,
           maxSearches: 5,
@@ -170,41 +280,44 @@ export default function Home() {
         );
       }
 
-      const researchResponse = (await response.json()) as ResearchResponse;
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Response body is not readable");
 
-      // Agent1 completed
-      setAgent1((prev) => ({ ...prev, status: "completed", progress: 100 }));
-      setCurrentAgent(2);
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      // Agent2 status
-      setAgent2((prev) => ({
-        ...prev,
-        status: researchResponse.searchResults ? "completed" : "idle",
-        progress: researchResponse.searchResults ? 100 : 0,
-      }));
-      setCurrentAgent(3);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      const report = researchResponse.report;
-      setAgent3((prev) => ({ ...prev, status: "active", progress: 0 }));
+        buffer += decoder.decode(value, { stream: true });
 
-      await streamReport(report, setStreamingText, setAgent3);
+        // Process complete SSE blocks (delimited by double newline)
+        while (buffer.includes("\n\n")) {
+          const splitIndex = buffer.indexOf("\n\n");
+          const block = buffer.slice(0, splitIndex);
+          buffer = buffer.slice(splitIndex + 2);
 
-      const reportCitations = researchResponse.citations ?? [];
-      setAgent3((prev) => ({ ...prev, status: "completed", progress: 100 }));
-      setFinalReport(report);
-      setCitations(reportCitations);
-      setStreamingText("");
-      addToHistory(trimmedQuery, report, reportCitations);
+          const events = parseSseEvents(block);
+          for (const event of events) {
+            handleSseEvent(event);
+          }
+        }
+      }
+
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        const events = parseSseEvents(buffer);
+        for (const event of events) {
+          handleSseEvent(event);
+        }
+      }
+
+      // Save to local history after stream completes
+      addToHistory(trimmedQuery, finalReport || "", citations);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const errorReport = `# Research Error
-
-${message}
-
-## Troubleshooting
-- Confirm the NestJS API is running at ${apiBaseUrl}.
-- Confirm apps/api/.env contains a valid EXA_API_KEY.
-- If the backend is on another URL, set NEXT_PUBLIC_API_URL for the web app.`;
+      const errorReport = `# Research Error\n\n${message}\n\n## Troubleshooting\n- Confirm the NestJS API is running at ${apiBaseUrl}.\n- Confirm apps/api/.env contains a valid EXA_API_KEY.\n- If the backend is on another URL, set NEXT_PUBLIC_API_URL for the web app.`;
 
       setFinalReport(errorReport);
       setAgent1((prev) =>
@@ -219,7 +332,15 @@ ${message}
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [
+    query,
+    isSearching,
+    resetAgents,
+    handleSseEvent,
+    addToHistory,
+    finalReport,
+    citations,
+  ]);
 
   const reportText = streamingText || finalReport;
 

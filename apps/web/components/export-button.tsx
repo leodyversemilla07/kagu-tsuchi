@@ -1,7 +1,7 @@
 "use client";
 
+import { Download, FileJs, FileText } from "@phosphor-icons/react";
 import { Button } from "@workspace/ui/components/button";
-import { Download, FileText, FileJs } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface ExportButtonProps {
@@ -12,8 +12,8 @@ interface ExportButtonProps {
 
 export function ExportButton({ report, citations, query }: ExportButtonProps) {
   const exportAsMarkdown = () => {
-    const content = `# ${query}\n\n${report}\n\n## Citations\n${citations.map((citation, i) => `${i + 1}. ${citation}`).join('\n')}`;
-    const blob = new Blob([content], { type: 'text/markdown' });
+    const content = `# ${query}\n\n${report}\n\n## Citations\n${citations.map((citation, i) => `${i + 1}. ${citation}`).join("\n")}`;
+    const blob = new Blob([content], { type: "text/markdown" });
     downloadBlob(blob, `research-${Date.now()}.md`);
     toast.success("Report exported as Markdown");
   };
@@ -24,9 +24,11 @@ export function ExportButton({ report, citations, query }: ExportButtonProps) {
       report,
       citations,
       exportedAt: new Date().toISOString(),
-      source: "Kagu-tsuchi AI Research Assistant"
+      source: "Kagu-tsuchi AI Research Assistant",
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
     downloadBlob(blob, `research-${Date.now()}.json`);
     toast.success("Report exported as JSON");
   };
@@ -55,31 +57,32 @@ export function ExportButton({ report, citations, query }: ExportButtonProps) {
         </head>
         <body>
           <h1>${query}</h1>
-          <div>${report.replace(/\n/g, '<br>')}</div>
-          ${citations.length > 0 ? `<h2>Citations</h2><ol>${citations.map(citation => `<li>${citation}</li>`).join('')}</ol>` : ''}
+          <div>${report.replace(/\n/g, "<br>")}</div>
+          ${citations.length > 0 ? `<h2>Citations</h2><ol>${citations.map((citation) => `<li>${citation}</li>`).join("")}</ol>` : ""}
         </body>
         </html>
       `;
 
-      const printWindow = window.open('', '_blank');
+      const printWindow = window.open("", "_blank");
       if (printWindow) {
         printWindow.document.write(htmlContent);
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
-        toast.success("PDF export opened in new window - use browser's print to save as PDF");
+        toast.success(
+          "PDF export opened in new window - use browser's print to save as PDF"
+        );
       } else {
         toast.error("Failed to open print window");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to export as PDF");
-      console.error("PDF export error:", error);
     }
   };
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);

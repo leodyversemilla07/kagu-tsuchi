@@ -1,6 +1,6 @@
-import { QueryAnalysisResult } from "../../agent1/interfaces/search-plan.interface";
-import { SearchExecutionResult } from "../../agent2/interfaces/search-result.interface";
-import { SearchMemory } from "../../memory/memory.interface";
+import type { QueryAnalysisResult } from "../../agent1/interfaces/search-plan.interface";
+import type { SearchExecutionResult } from "../../agent2/interfaces/search-result.interface";
+import type { SearchMemory } from "../../memory/memory.interface";
 
 export interface SynthesisInput {
   queryAnalysis: QueryAnalysisResult;

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
 
 import "@workspace/ui/globals.css";
-import { cn } from "@workspace/ui/lib/utils";
 import { Toaster } from "@workspace/ui/components/sonner";
+import { cn } from "@workspace/ui/lib/utils";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
@@ -40,7 +41,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster />
         </ThemeProvider>
       </body>

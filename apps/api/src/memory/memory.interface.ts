@@ -1,5 +1,5 @@
-import { SearchPlan } from "../agent1/interfaces/search-plan.interface";
-import { SearchResult } from "../agent2/interfaces/search-result.interface";
+import type { SearchPlan } from "../agent1/interfaces/search-plan.interface";
+import type { SearchResult } from "../agent2/interfaces/search-result.interface";
 
 export interface SearchMemory {
   id: string;

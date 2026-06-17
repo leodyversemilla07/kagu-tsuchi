@@ -1,14 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { Agent1Service } from "../agent1/agent1.service";
-import { QueryDto } from "../agent1/dto/query.dto";
-import { QueryAnalysisResult } from "../agent1/interfaces/search-plan.interface";
+import type { QueryDto } from "../agent1/dto/query.dto";
+import type { QueryAnalysisResult } from "../agent1/interfaces/search-plan.interface";
 import { Agent2Service } from "../agent2/agent2.service";
 import { SearchQueryDto } from "../agent2/dto/search.dto";
-import { SearchExecutionResult } from "../agent2/interfaces/search-result.interface";
+import type { SearchExecutionResult } from "../agent2/interfaces/search-result.interface";
 import { Agent3Service } from "../agent3/agent3.service";
-import { SynthesisResult } from "../agent3/interfaces/synthesis.interface";
-import { SearchMemory } from "../memory/memory.interface";
+import type { SynthesisResult } from "../agent3/interfaces/synthesis.interface";
+import type { SearchMemory } from "../memory/memory.interface";
 import { MemoryService } from "../memory/memory.service";
 
 @Injectable()
@@ -137,94 +137,83 @@ export class SearchService {
         subscriber.next(this.createSseEvent(type, source, data));
       };
 
-      emit("step", "memory", "Retrieving relevant memories...");
+      const runPipeline = async () => {
+        try {
+          emit("step", "memory", "Retrieving relevant memories...");
 
-      // Retrieve memories first
-      this.memoryService
-        .retrieve(queryDto.query, queryDto.userId, 3)
-        .then((relevantMemories) => {
+          // Step 0: Retrieve memories
+          const relevantMemories = await this.memoryService.retrieve(
+            queryDto.query,
+            queryDto.userId,
+            3
+          );
           const memories = relevantMemories.map((m) => m.memories[0]);
 
-          this.agent1Service
-            .analyzeQuery(queryDto)
-            .then((queryAnalysis) => {
-              emit("data", "agent1", JSON.stringify(queryAnalysis));
+          // Step 1: Agent1 — Query Analysis
+          emit("step", "agent1", "Analyzing query...");
+          const queryAnalysis = await this.agent1Service.analyzeQuery(queryDto);
+          emit("data", "agent1", JSON.stringify(queryAnalysis));
 
-              if (!queryAnalysis.clarified) {
-                emit(
-                  "done",
-                  "follow-up",
-                  JSON.stringify(queryAnalysis.followUpQuestions)
-                );
-                subscriber.complete();
-                return;
-              }
+          if (!queryAnalysis.clarified) {
+            emit(
+              "done",
+              "follow-up",
+              JSON.stringify(queryAnalysis.followUpQuestions)
+            );
+            subscriber.complete();
+            return;
+          }
 
-              const searchQueryDto: SearchQueryDto = {
-                queries: queryAnalysis.searchPlan.queries,
-                maxSearches: queryAnalysis.searchPlan.maxSearches,
-                priorityDomains: queryAnalysis.searchPlan.priorityDomains,
-                deepThink: queryDto.deepThink,
-              };
+          // Step 2: Agent2 — Search Execution
+          emit("step", "agent2", "Searching...");
+          const searchQueryDto: SearchQueryDto = {
+            queries: queryAnalysis.searchPlan.queries,
+            maxSearches: queryAnalysis.searchPlan.maxSearches,
+            priorityDomains: queryAnalysis.searchPlan.priorityDomains,
+            deepThink: queryDto.deepThink,
+          };
+          const searchResults =
+            await this.agent2Service.executeSearch(searchQueryDto);
+          emit("data", "agent2", JSON.stringify(searchResults));
 
-              emit("step", "agent1", "Query analyzed");
-              emit("step", "agent2", "Searching...");
+          // Step 3: Agent3 — Synthesis
+          emit(
+            "step",
+            "agent3",
+            `Found ${searchResults.results?.length || 0} results. Synthesizing...`
+          );
+          const synthesis = await this.agent3Service.synthesize({
+            queryAnalysis,
+            searchResults,
+            memories,
+          });
+          emit("done", "agent3", JSON.stringify(synthesis));
 
-              this.agent2Service
-                .executeSearch(searchQueryDto)
-                .then((searchResults) => {
-                  emit("data", "agent2", JSON.stringify(searchResults));
-
-                  emit(
-                    "step",
-                    "agent3",
-                    `Found ${searchResults.results?.length || 0} results`
-                  );
-
-                  this.agent3Service
-                    .synthesize({
-                      queryAnalysis,
-                      searchResults,
-                      memories,
-                    })
-                    .then(async (synthesis) => {
-                      emit("done", "agent3", JSON.stringify(synthesis));
-
-                      // Store in memory if results are sufficient
-                      if (searchResults.sufficient && searchResults.results) {
-                        const memoryId = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-                        await this.memoryService.store({
-                          id: memoryId,
-                          userId: queryDto.userId,
-                          query: queryDto.query,
-                          searchPlan: queryAnalysis.searchPlan,
-                          results: searchResults.results,
-                          report: synthesis.report,
-                          timestamp: new Date(),
-                        });
-                      }
-
-                      subscriber.complete();
-                    })
-                    .catch((error) => {
-                      emit("error", "agent3", error.message);
-                      subscriber.complete();
-                    });
-                })
-                .catch((error) => {
-                  emit("error", "agent2", error.message);
-                  subscriber.complete();
-                });
-            })
-            .catch((error) => {
-              emit("error", "agent1", error.message);
-              subscriber.complete();
+          // Step 4: Store in memory if results are sufficient
+          if (searchResults.sufficient && searchResults.results) {
+            const memoryId = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+            await this.memoryService.store({
+              id: memoryId,
+              userId: queryDto.userId,
+              query: queryDto.query,
+              searchPlan: queryAnalysis.searchPlan,
+              results: searchResults.results,
+              report: synthesis.report,
+              timestamp: new Date(),
             });
-        })
-        .catch((error) => {
-          emit("error", "memory", error.message);
+          }
+
           subscriber.complete();
-        });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error(`Streaming pipeline error: ${message}`);
+          emit("error", "pipeline", message);
+          subscriber.complete();
+        }
+      };
+
+      runPipeline();
     });
   }
 

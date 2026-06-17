@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { Agent1Service } from "./agent1.service";
 import { QueryDto } from "./dto/query.dto";
-import { QueryAnalysisResult } from "./interfaces/search-plan.interface";
+import type { QueryAnalysisResult } from "./interfaces/search-plan.interface";
 
 @Controller("agent1")
 export class Agent1Controller {

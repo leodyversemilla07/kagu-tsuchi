@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { MemorySearchResult, SearchMemory } from "./memory.interface";
+import type { MemorySearchResult, SearchMemory } from "./memory.interface";
 
 @Injectable()
 export class MemoryService {
@@ -26,8 +26,12 @@ export class MemoryService {
   }
 
   /**
-   * Retrieve relevant memories for a query (simple keyword match for now)
-   * TODO: Upgrade to vector similarity search with Pinecone
+   * Retrieve relevant memories for a query.
+   *
+   * Uses a lightweight TF-IDF-inspired scoring approach:
+   *  - Exact phrase match gets highest weight
+   *  - Individual keyword matches are weighted by inverse document frequency
+n   *  - Recency is factored in as a small bonus
    */
   async retrieve(
     query: string,
@@ -36,7 +40,9 @@ export class MemoryService {
   ): Promise<MemorySearchResult[]> {
     const results: MemorySearchResult[] = [];
     const queryLower = query.toLowerCase();
-    const keywords = queryLower.split(" ").filter((k) => k.length > 3);
+    const queryTerms = queryLower.split(/\s+/).filter((k) => k.length > 2);
+
+    if (queryTerms.length === 0) return results;
 
     // Get candidate memories
     let candidateIds: string[] = [];
@@ -46,19 +52,56 @@ export class MemoryService {
       candidateIds = Array.from(this.memories.keys());
     }
 
-    // Simple keyword scoring
+    if (candidateIds.length === 0) return results;
+
+    // Pre-compute document frequency (how many memories contain each term)
+    const docFrequency = new Map<string, number>();
+    for (const id of candidateIds) {
+      const memory = this.memories.get(id);
+      if (!memory) continue;
+      const memoryText =
+        `${memory.query} ${JSON.stringify(memory.searchPlan)}`.toLowerCase();
+      const uniqueTerms = new Set(
+        queryTerms.filter((t) => memoryText.includes(t))
+      );
+      for (const term of uniqueTerms) {
+        docFrequency.set(term, (docFrequency.get(term) ?? 0) + 1);
+      }
+    }
+
+    const totalDocs = candidateIds.length;
+
+    // Score each candidate
     for (const id of candidateIds) {
       const memory = this.memories.get(id);
       if (!memory) continue;
 
-      let score = 0;
       const memoryText =
         `${memory.query} ${JSON.stringify(memory.searchPlan)}`.toLowerCase();
 
-      for (const keyword of keywords) {
-        if (memoryText.includes(keyword)) {
-          score += 1;
+      // TF-IDF-like scoring
+      let score = 0;
+      for (const term of queryTerms) {
+        if (memoryText.includes(term)) {
+          // Term frequency: 1 if present (binary)
+          const tf = 1;
+          // Inverse document frequency: rare terms score higher
+          const df = docFrequency.get(term) ?? 1;
+          const idf = Math.log((totalDocs + 1) / (df + 1)) + 1;
+          score += tf * idf;
         }
+      }
+
+      // Exact phrase match bonus (highest signal)
+      if (memoryText.includes(queryLower)) {
+        score += queryTerms.length * 2;
+      }
+
+      // Recency bonus: memories from the last 24h get a small boost
+      const ageMs = Date.now() - new Date(memory.timestamp).getTime();
+      const dayMs = 24 * 60 * 60 * 1000;
+      if (ageMs < dayMs) {
+        score += 0.5 * (1 - ageMs / dayMs);
       }
 
       if (score > 0) {
@@ -66,7 +109,7 @@ export class MemoryService {
       }
     }
 
-    // Sort by relevance and limit
+    // Sort by relevance (descending) and limit
     return results
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, limit);

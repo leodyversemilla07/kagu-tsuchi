@@ -1,5 +1,3 @@
-// eslint-disable-next-line import/no-relative-parent-imports
-
 import type { INestApplication } from "@nestjs/common";
 import { Test as NestTesting, type TestingModule } from "@nestjs/testing";
 import request from "supertest";

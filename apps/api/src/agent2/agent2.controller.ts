@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { Agent2Service } from "./agent2.service";
 import { SearchQueryDto } from "./dto/search.dto";
-import { SearchExecutionResult } from "./interfaces/search-result.interface";
+import type { SearchExecutionResult } from "./interfaces/search-result.interface";
 
 @Controller("agent2")
 export class Agent2Controller {

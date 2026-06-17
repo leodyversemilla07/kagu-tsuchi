@@ -71,12 +71,18 @@ export class Agent2Service {
 
   private async searchExa(
     query: string,
-    _priorityDomains?: string[]
+    priorityDomains?: string[]
   ): Promise<SearchResult[]> {
     try {
+      const includeDomains =
+        priorityDomains && priorityDomains.length > 0
+          ? priorityDomains
+          : undefined;
+
       const response = await this.exa.search(query, {
         numResults: 10,
         useAutoprompt: true,
+        includeDomains,
         contents: {
           text: true,
         },
