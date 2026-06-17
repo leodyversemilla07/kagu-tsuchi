@@ -25,9 +25,6 @@ export class SearchQueryDto {
   priorityDomains?: string[];
 
   @IsOptional()
-  deepThink?: boolean;
-
-  @IsOptional()
   @IsString()
   pastContext?: string;
 }

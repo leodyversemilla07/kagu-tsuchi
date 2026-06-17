@@ -59,12 +59,10 @@ export class Agent2Service {
 
     return {
       sufficient: isSufficient,
-      deepThinkUsed: false, // Disabled until OpenAI key is available
       results: uniqueResults.slice(0, 10),
       metadata: {
         totalSearches: searchesUsed,
         queriesUsed: queries,
-        deepThinkTriggered: false,
       },
     };
   }
@@ -73,33 +71,57 @@ export class Agent2Service {
     query: string,
     priorityDomains?: string[]
   ): Promise<SearchResult[]> {
-    try {
-      const includeDomains =
-        priorityDomains && priorityDomains.length > 0
-          ? priorityDomains
-          : undefined;
+    const maxRetries = 2;
+    let lastError: unknown;
 
-      const response = await this.exa.search(query, {
-        numResults: 10,
-        useAutoprompt: true,
-        includeDomains,
-        contents: {
-          text: true,
-        },
-      });
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const includeDomains =
+          priorityDomains && priorityDomains.length > 0
+            ? priorityDomains
+            : undefined;
 
-      return response.results.map((r) => ({
-        title: r.title || "",
-        url: r.url,
-        snippet: r.text?.slice(0, 500) || "",
-        publishedDate: r.publishedDate,
-        score: r.score,
-      }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Exa API error: ${message}`);
-      throw error;
+        const response = await this.exa.search(query, {
+          numResults: 10,
+          useAutoprompt: true,
+          includeDomains,
+          contents: {
+            text: true,
+          },
+        });
+
+        return response.results.map((r) => ({
+          title: r.title || "",
+          url: r.url,
+          snippet: r.text?.slice(0, 500) || "",
+          publishedDate: r.publishedDate,
+          score: r.score,
+        }));
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+
+        // Don't retry on auth errors (401/403) or client errors (4xx)
+        const isClientError =
+          error instanceof Error && /\b(40[0-3]|401|403|400)\b/.test(message);
+        if (isClientError || attempt === maxRetries) {
+          this.logger.error(
+            `Exa API error (attempt ${attempt + 1}): ${message}`
+          );
+          throw error;
+        }
+
+        // Exponential backoff: 500ms, 1000ms
+        const delayMs = 500 * 2 ** attempt;
+        this.logger.warn(
+          `Exa API error (attempt ${attempt + 1}), retrying in ${delayMs}ms: ${message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
+
+    // Should never reach here, but TypeScript needs it
+    throw lastError;
   }
 
   private evaluateResults(results: SearchResult[]): boolean {

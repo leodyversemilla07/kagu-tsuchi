@@ -13,7 +13,4 @@ export class QueryDto {
   @Min(1)
   @Max(20)
   maxSearches?: number;
-
-  @IsOptional()
-  deepThink?: boolean;
 }

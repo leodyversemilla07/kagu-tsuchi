@@ -61,7 +61,6 @@ describe("Agent3Service", () => {
         },
         searchResults: {
           sufficient: true,
-          deepThinkUsed: false,
           results: [
             {
               title: "React Documentation",
@@ -73,7 +72,6 @@ describe("Agent3Service", () => {
           metadata: {
             totalSearches: 1,
             queriesUsed: [],
-            deepThinkTriggered: false,
           },
         },
       };
@@ -100,12 +98,10 @@ describe("Agent3Service", () => {
         },
         searchResults: {
           sufficient: true,
-          deepThinkUsed: false,
           results: [],
           metadata: {
             totalSearches: 0,
             queriesUsed: [],
-            deepThinkTriggered: false,
           },
         },
         memories: [
@@ -140,12 +136,10 @@ describe("Agent3Service", () => {
         },
         searchResults: {
           sufficient: false,
-          deepThinkUsed: false,
           results: [],
           metadata: {
             totalSearches: 0,
             queriesUsed: [],
-            deepThinkTriggered: false,
           },
         },
       };

@@ -11,7 +11,7 @@ import {
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentVisualizer } from "@/components/agent-visualizer";
@@ -97,6 +97,29 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { addToHistory } = useSearchHistory();
 
+  // Refs for values accessed inside callbacks to avoid stale closures
+  const trimmedQueryRef = useRef("");
+  const finalReportRef = useRef("");
+  const citationsRef = useRef<string[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    finalReportRef.current = finalReport;
+  }, [finalReport]);
+  useEffect(() => {
+    citationsRef.current = citations;
+  }, [citations]);
+
+  // Cleanup timer and abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
+
   const resetAgents = useCallback(() => {
     setAgent1(initialAgents.agent1);
     setAgent2(initialAgents.agent2);
@@ -108,31 +131,44 @@ export default function Home() {
    * Simulate streaming of the final report text for a typewriter effect.
    * Declared first because handleSseEvent depends on it.
    */
-  const streamReportText = useCallback((report: string) => {
-    setAgent3((prev) => ({ ...prev, status: "active", progress: 10 }));
-    setStreamingText("");
+  const streamReportText = useCallback(
+    (report: string, query: string, reportCitations: string[]) => {
+      // Clear any existing streaming timer
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
 
-    let index = 0;
-    const chunkSize = 12;
-    const intervalMs = 8;
+      setAgent3((prev) => ({ ...prev, status: "active", progress: 10 }));
+      setStreamingText("");
 
-    const timer = setInterval(() => {
-      index += chunkSize;
-      const nextText = report.substring(0, index);
-      setStreamingText(nextText);
-      setAgent3((prev) => ({
-        ...prev,
-        progress: Math.min(99, Math.floor((index / report.length) * 100)),
-      }));
+      let index = 0;
+      const chunkSize = 12;
+      const intervalMs = 8;
 
-      if (index >= report.length) {
-        clearInterval(timer);
-        setAgent3((prev) => ({ ...prev, status: "completed", progress: 100 }));
-        setFinalReport(report);
-        setStreamingText("");
-      }
-    }, intervalMs);
-  }, []);
+      streamTimerRef.current = setInterval(() => {
+        index += chunkSize;
+        const nextText = report.substring(0, index);
+        setStreamingText(nextText);
+        setAgent3((prev) => ({
+          ...prev,
+          progress: Math.min(99, Math.floor((index / report.length) * 100)),
+        }));
+
+        if (index >= report.length) {
+          if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+          streamTimerRef.current = null;
+          setAgent3((prev) => ({
+            ...prev,
+            status: "completed",
+            progress: 100,
+          }));
+          setFinalReport(report);
+          setStreamingText("");
+          // Save to history only after streaming completes
+          addToHistory(query, report, reportCitations);
+        }
+      }, intervalMs);
+    },
+    [addToHistory]
+  );
 
   /**
    * Handle a single SSE event from the backend stream.
@@ -210,9 +246,13 @@ export default function Home() {
             const payload = JSON.parse(event.data);
 
             if (event.source === "agent3" && payload.report) {
-              streamReportText(payload.report);
               const reportCitations = payload.citations ?? [];
               setCitations(reportCitations);
+              streamReportText(
+                payload.report,
+                trimmedQueryRef.current,
+                reportCitations
+              );
             } else if (event.source === "follow-up") {
               const questions = Array.isArray(payload) ? payload : [];
               const followUpReport = `# Follow-up Needed\n\n${questions.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n")}`;
@@ -222,6 +262,7 @@ export default function Home() {
                 status: "completed",
                 progress: 100,
               }));
+              addToHistory(trimmedQueryRef.current, followUpReport, []);
             }
           } catch {
             // Non-JSON done — ignore
@@ -245,7 +286,7 @@ export default function Home() {
         }
       }
     },
-    [streamReportText]
+    [streamReportText, addToHistory]
   );
 
   /**
@@ -261,16 +302,22 @@ export default function Home() {
     setFinalReport("");
     setCitations([]);
     resetAgents();
+    trimmedQueryRef.current = trimmedQuery;
 
     try {
+      // Cancel any in-flight request
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       const response = await fetch(`${apiBaseUrl}/search/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: trimmedQuery,
           maxSearches: 5,
-          deepThink: false,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -312,10 +359,12 @@ export default function Home() {
           handleSseEvent(event);
         }
       }
-
-      // Save to local history after stream completes
-      addToHistory(trimmedQuery, finalReport || "", citations);
     } catch (error) {
+      // Ignore abort errors (user cancelled)
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       const errorReport = `# Research Error\n\n${message}\n\n## Troubleshooting\n- Confirm the NestJS API is running at ${apiBaseUrl}.\n- Confirm apps/api/.env contains a valid EXA_API_KEY.\n- If the backend is on another URL, set NEXT_PUBLIC_API_URL for the web app.`;
 
@@ -331,16 +380,9 @@ export default function Home() {
       );
     } finally {
       setIsSearching(false);
+      abortControllerRef.current = null;
     }
-  }, [
-    query,
-    isSearching,
-    resetAgents,
-    handleSseEvent,
-    addToHistory,
-    finalReport,
-    citations,
-  ]);
+  }, [query, isSearching, resetAgents, handleSseEvent]);
 
   const reportText = streamingText || finalReport;
 

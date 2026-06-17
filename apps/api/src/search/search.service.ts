@@ -77,7 +77,6 @@ export class SearchService {
         queries: queryAnalysis.searchPlan.queries,
         maxSearches: queryAnalysis.searchPlan.maxSearches,
         priorityDomains: queryAnalysis.searchPlan.priorityDomains,
-        deepThink: queryDto.deepThink,
         pastContext,
       };
 
@@ -170,7 +169,6 @@ export class SearchService {
             queries: queryAnalysis.searchPlan.queries,
             maxSearches: queryAnalysis.searchPlan.maxSearches,
             priorityDomains: queryAnalysis.searchPlan.priorityDomains,
-            deepThink: queryDto.deepThink,
           };
           const searchResults =
             await this.agent2Service.executeSearch(searchQueryDto);

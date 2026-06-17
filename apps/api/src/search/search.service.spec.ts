@@ -39,7 +39,6 @@ describe("SearchService", () => {
           useValue: {
             executeSearch: jest.fn().mockResolvedValue({
               sufficient: true,
-              deepThinkUsed: false,
               results: [
                 {
                   title: "Result",
@@ -50,7 +49,6 @@ describe("SearchService", () => {
               metadata: {
                 totalSearches: 1,
                 queriesUsed: [],
-                deepThinkTriggered: false,
               },
             }),
           },
@@ -159,12 +157,10 @@ describe("SearchService", () => {
     it("should not store memory when results are insufficient", async () => {
       (agent2Service.executeSearch as jest.Mock).mockResolvedValueOnce({
         sufficient: false,
-        deepThinkUsed: false,
         results: [{ title: "R", url: "https://example.com", snippet: "s" }],
         metadata: {
           totalSearches: 1,
           queriesUsed: [],
-          deepThinkTriggered: false,
         },
       });
 
